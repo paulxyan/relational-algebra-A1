@@ -1,0 +1,629 @@
+\documentclass{article}
+\usepackage{fullpage}
+\usepackage[normalem]{ulem}
+\usepackage{amstext,amsmath,amssymb}
+\usepackage{pifont}% http://ctan.org/pkg/pifont
+\usepackage{xcolor}
+
+\newcommand{\var}[1]{\mathit{#1}}
+
+
+\setlength{\parskip}{6pt}
+
+\begin{document}
+
+~~~\vspace{-2.0cm}
+
+\noindent
+University of Toronto\\
+{\sc csc}343, Winter 2026\\[10pt]
+{\LARGE\bf Assignment 1: Paul Yan 1010288617 }
+
+
+
+%----------------------------------------------------------------------------------------------------------------------
+\section*{Part 1: Queries}
+
+\begin{enumerate}
+
+\item   % ----------
+{Frugal doctors}
+
+{~}\\
+{\large
+-- Brand-name drugs that do not have a generic form and have a recorded price. \\[5pt]
+$
+\var{BrandItemOnly}(\var{DIN}) :=\\[5pt]
+\Pi_{Product.\var{DIN}}
+\sigma_{Product.\var{DIN} = Price.\var{DIN}}
+(\var{Product} \times \var{Price}) 
+-
+\Pi_{Product.\var{DIN}}
+\sigma_{\substack{
+Product.\var{DIN} = Price.\var{DIN} \\
+\wedge \\
+Price.\var{DIN} = Generic.\var{brand}
+}}
+(\var{Product} \times \var{Price} \times \var{Generic})
+\\[10pt]
+$
+-- Brand-name drugs (with price) that do have a generic alternative. \\[5pt]
+$
+\var{HasGeneric}(\var{DIN}) :=
+\Pi_{Product.\var{DIN}}(\var{Product} \bowtie \var{Price})
+-
+\Pi_{\var{DIN}}(\var{BrandItemOnly})
+\\[10pt]
+$
+-- Cheapest generic versions (ties allowed) among generics sharing the same brand. \\[5pt]
+$
+\var{CheapestGenericDrugs}(\var{DIN}) :=\\[5pt]
+\Pi_{\var{DIN}}
+\Big(
+\Pi_{\var{DIN}, \var{price}}(\var{Generic} \bowtie \var{Price})
+-
+\Pi_{g1.\var{DIN}, g1.\var{price}}
+\sigma_{\substack{
+g1.\var{DIN} \neq g2.\var{DIN} \\
+\wedge \\
+g1.\var{price} > g2.\var{price} \\
+\wedge \\
+g1.\var{brand} = g2.\var{brand}
+}}
+\big(
+(\rho_{g1}(\var{Generic} \bowtie \var{Price}))
+\times\hspace*{1cm}
+(\rho_{g2}(\var{Generic} \bowtie \var{Price}))
+\big)
+\Big)
+\\[10pt]
+$
+-- Non-cheapest generic drugs. \\[5pt]
+$
+\var{NonCheapestDrugs}(\var{DIN}) :=
+\Pi_{\var{DIN}}(\var{Generic} \bowtie \var{Price})
+-
+\var{CheapestGenericDrugs}
+\\[10pt]
+$
+-- Prescriptions for drugs that have a recorded price (attach the Price row). \\[5pt]
+$
+\var{PricedRx}(\var{RxID}, \var{date}, \var{patient}, \var{drug}, \var{doctor}, \var{dosage}, \var{note}, \var{DIN}, \var{price}) :=\\[5pt]
+\var{Prescription} \bowtie_{\var{Prescription}.\var{drug} = \var{Price}.\var{DIN}} \var{Price}
+\\[10pt]
+$
+-- Doctors who have prescribed one or more priced drugs. \\[5pt]
+$
+\var{OneOrMoreDrugs}(\var{doctor}) :=
+\Pi_{\var{doctor}}(\var{PricedRx})
+\\[10pt]
+$
+-- Doctors who have prescribed two or more different priced drugs. \\[5pt]
+$
+\var{TwoOrMoreDrugs}(\var{doctor}) :=
+\Pi_{p1.\var{doctor}}
+\Big(
+\sigma_{\substack{
+p1.\var{doctor} = p2.\var{doctor} \\
+\wedge \\
+p1.\var{drug} \neq p2.\var{drug}
+}}
+\big(
+\rho_{p1}(\var{PricedRx})
+\times
+\rho_{p2}(\var{PricedRx})
+\big)
+\Big)
+\\[10pt]
+$
+-- Doctors who have only prescribed one priced drug. \\[5pt]
+$
+\var{OnlyOneDrug}(\var{doctor}) :=
+\Pi_{\var{doctor}}(\var{OneOrMoreDrugs})
+-
+\Pi_{\var{doctor}}(\var{TwoOrMoreDrugs})
+\\[10pt]
+$
+-- Doctors who have made at least one priced prescription. \\[5pt]
+$
+\var{SomePricedDoctors}(\var{doctor}) :=
+\Pi_{\var{doctor}}(\var{PricedRx})
+\\[10pt]
+$
+-- Doctors who prescribed at least one invalid priced drug:
+(i) a brand drug that has a generic alternative, OR
+(ii) a generic drug that is not the cheapest among its brand-equivalents. \\[5pt]
+$
+\var{InvalidDoctors}(\var{doctor}) :=\\[5pt]
+\Pi_{\var{doctor}}
+\sigma_{\substack{\var{PricedRx}.\var{drug} = \var{HasGeneric}.\var{DIN}}}
+(\var{PricedRx} \times \var{HasGeneric})\\[5pt]\hspace*{1cm}
+\cup
+\Pi_{\var{doctor}}
+\sigma_{\substack{\var{PricedRx}.\var{drug} = \var{NonCheapestDrugs}.\var{DIN}}}
+(\var{PricedRx} \times \var{NonCheapestDrugs})
+\\[10pt]
+$
+-- Final answer: priced-prescription doctors excluding those who only prescribed one priced drug and those who ever prescribed an invalid priced drug. \\[5pt]
+$
+\var{Answer}(\var{doctor}) :=
+\var{SomePricedDoctors}
+-
+(\var{OnlyOneDrug} \cup \var{InvalidDoctors})
+$
+}
+
+\item   % ----------
+{Potential doctor shopping}
+
+{~}\\
+{\large
+-- Two generics with the same brand-name equivalent. \\[5pt]
+$
+\var{GenericPairs}(\var{DIN1}, \var{DIN2}) :=
+\Pi_{G1.\var{DIN}, G2.\var{DIN}}
+\sigma_{\substack{G1.\var{brand} = G2.\var{brand} \\ \wedge \\ G1.\var{DIN} \neq G2.\var{DIN}}}
+\big( \rho_{G1}(\var{Generic}) \times \rho_{G2}(\var{Generic}) \big) \\[10pt]
+$
+-- A brand-name drug and its generic equivalent (both directions). \\[5pt]
+$
+\var{BrandGenericPairs}(\var{DIN1}, \var{DIN2}) := \\[5pt]
+\hspace*{1cm}
+\rho_{\var{DIN1}, \var{DIN2}}
+\Big( 
+\Pi_{\var{brand}, \var{DIN}}
+\var{Generic}
+\Big) 
+\cup
+\rho_{\var{DIN1}, \var{DIN2}}
+\Big(
+\Pi_{\var{DIN}, \var{brand}}
+\var{Generic}
+\Big) \\[10pt]
+$
+-- Identity pairs where every drug is equivalent to itself. \\[5pt]
+$
+\var{IdentityPairs}(\var{DIN1}, \var{DIN2}) := \\[5pt]
+\hspace*{1cm}
+\rho_{\var{DIN1}, \var{DIN2}}
+\Big(
+\Pi_{P1.\var{DIN}, P2.\var{DIN}}
+\sigma_{P1.\var{DIN} = P2.\var{DIN}}
+\big( \rho_{P1}(\var{Product})
+\times \rho_{P2}(\var{Product}) \big)
+\Big)
+\cup \\[5pt]
+\hspace*{1cm}
+\rho_{\var{DIN1}, \var{DIN2}}
+\Big(
+\Pi_{G1.\var{DIN}, G2.\var{DIN}}
+\sigma_{G1.\var{DIN} = G2.\var{DIN}}
+\big( \rho_{G1}(\var{Generic})
+\times \rho_{G2}(\var{Generic}) \big)
+\Big) \\[10pt]
+$
+-- All pairs of equivalent medications. \\[5pt]
+$
+\var{EquivalentPairs}(\var{DIN1}, \var{DIN2}) :=
+\var{GenericPairs} \cup \var{BrandGenericPairs} \cup \var{IdentityPairs} \\[10pt]
+$
+-- Patients prescribed equivalent medications by two different doctors. \\[5pt]
+$
+\var{DoctorShopping}(\var{patient}) := \\[5pt]
+\hspace*{1cm}
+\Pi_{P1.\var{patient}}
+\sigma_{\substack{P1.\var{patient} = P2.\var{patient} \\ \wedge \\ P1.\var{doctor} \neq P2.\var{doctor}}}
+\big( 
+(\rho_{P1}(\var{Prescription})
+\bowtie_{P1.\var{drug} = \var{DIN1}} \var{EquivalentPairs}) \\[5pt]
+\hspace*{1cm}
+\bowtie_{\var{DIN2} = P2.\var{drug}}
+\rho_{P2}(\var{Prescription})
+\big) \\[10pt]
+$
+-- OHIP number, name, and phone number of patients who doctor shop. \\[5pt]
+$
+\var{Answer}(\var{OHIP}, \var{name}, \var{phone}) := 
+\Pi_{\var{OHIP}, \var{name}, \var{phone}}
+(\var{DoctorShopping} \bowtie_{\var{patient} = \var{OHIP}} \var{Patient})
+$
+}
+
+\item   % ----------
+{Safest ingredient}\\[5pt]
+-- cannot be expressed 
+
+\item   % ----------
+{Drug shortage}
+
+{~}\\
+{\large
+-- All unfilled prescriptions (RxID of prescriptions not in Filled). \\[5pt]
+$
+\var{UnfilledRxIDs}(\var{RxID}) := 
+\Pi_{\var{RxID}}
+\var{Prescription}
+-
+\Pi_{\var{RxID}}
+\var{Filled} \\[10pt]
+$
+-- Unfilled prescriptions with drug and patient information. \\[5pt]
+$
+\var{UnfilledPrescriptions}(\var{RxID}, \var{drug}, \var{patient}) :=
+\Pi_{\var{RxID}, \var{drug}, \var{patient}}
+(\var{UnfilledRxIDs} \bowtie \var{Prescription}) \\[10pt]
+$
+-- Drugs with at least two different patients having unfilled prescriptions. \\[5pt]
+$
+\var{TwoPatients}(\var{drug}) := \\[5pt]
+\hspace*{1cm}
+\Pi_{U1.\var{drug}}
+\sigma_{\substack{U1.\var{drug} = U2.\var{drug} \\ \wedge \\ U1.\var{patient} \neq U2.\var{patient}}}
+\big( \rho_{U1}(\var{UnfilledPrescriptions})
+\times \rho_{U2}(\var{UnfilledPrescriptions}) \big) \\[10pt]
+$
+-- Drugs with more than two unfilled prescriptions. \\[5pt]
+$
+\var{MoreThanTwo}(\var{drug}) := \\[5pt]
+\hspace*{1cm}
+\Pi_{U1.\var{drug}}
+\sigma_{\substack{U1.\var{drug} = U2.\var{drug} \\ \wedge \\ U1.\var{drug} = U3.\var{drug} \\ \wedge \\ U1.\var{RxID} \neq U2.\var{RxID} \\ \wedge \\ U1.\var{RxID} \neq U3.\var{RxID} \\ \wedge \\ U2.\var{RxID} \neq U3.\var{RxID}}}
+\big( \rho_{U1}(\var{UnfilledPrescriptions})
+\times \rho_{U2}(\var{UnfilledPrescriptions}) \\[5pt]
+\hspace*{1cm}
+\times \rho_{U3}(\var{UnfilledPrescriptions}) \big) \\[10pt]
+$
+-- Drugs meeting both conditions. \\[5pt]
+$
+\var{ShortDrugs}(\var{drug}) := 
+\var{TwoPatients} \cap \var{MoreThanTwo} \\[10pt]
+$
+-- DIN and manufacturer for brand-name drugs in shortage. \\[5pt]
+$
+\var{BrandShortage}(\var{DIN}, \var{manufacturer}) :=
+\Pi_{\var{DIN}, \var{manufacturer}}
+(\var{ShortDrugs} \bowtie_{\var{drug} = \var{DIN}} \var{Product}) \\[10pt]
+$
+-- DIN and manufacturer for generic drugs in shortage. \\[5pt]
+$
+\var{GenericShortage}(\var{DIN}, \var{manufacturer}) :=
+\Pi_{\var{DIN}, \var{manufacturer}}
+(\var{ShortDrugs} \bowtie_{\var{drug} = \var{DIN}} \var{Generic}) \\[10pt]
+$
+-- DIN and manufacturer of all drugs in shortage. \\[5pt]
+$
+\var{Answer}(\var{DIN}, \var{manufacturer}) := 
+\var{BrandShortage} \cup \var{GenericShortage}
+$
+}
+
+\item   % ----------
+{Protecting drug patents} 
+
+
+{~}\\
+{\large
+-- Ignore strength and unit: keep only the ingredient set per drug. \\[5pt]
+$
+\var{Ing}(\var{DIN}, \var{ingredient}) :=
+\Pi_{\var{DIN}, \var{ingredient}}(\var{Contains})
+\\[10pt]
+$
+-- All pairs of different brand-name drugs (no pseudo-duplicates), with names. \\[5pt]
+$
+\var{AllNamedPairs}(\var{DIN1}, \var{Name1}, \var{DIN2}, \var{Name2}) :=\\[5pt]
+\Pi_{P1.\var{DIN}, P1.\var{name}, P2.\var{DIN}, P2.\var{name}}
+\sigma_{\substack{P1.\var{DIN} < P2.\var{DIN}}}
+\big(\rho_{P1}(\var{Product}) \times \rho_{P2}(\var{Product})\big)
+\\[10pt]
+$
+-- Ingredient triples for the first drug in each pair. \\[5pt]
+$
+\var{AllPairs}(\var{DIN1}, \var{ingredient1}, \var{DIN2}, \var{ingredient2}) :=\\[5pt]
+\Pi_{B1.\var{DIN}, B1.\var{ingredient}, B2.\var{DIN}, B2.\var{ingredient}}
+\sigma_{\substack{B1.\var{DIN} < B2.\var{DIN}}}
+\big(\rho_{B1}(\var{Ing}) \times \rho_{B2}(\var{Ing})\big)
+\\[10pt]
+$
+-- For each drug pair, list ingredients of the first drug (DIN1 side). \\[5pt]
+$
+\var{PairIng1}(\var{DIN1}, \var{DIN2}, \var{ingredient}) :=\\[5pt]
+\Pi_{\var{DIN1}, \var{DIN2}, \var{ingredient}}
+\sigma_{\substack{\var{AllNamedPairs}.\var{DIN1} = I1.\var{DIN}}}
+\big(\var{AllNamedPairs} \times \rho_{I1}(\var{Ing})\big)
+\\[10pt]
+$
+-- For each drug pair, list ingredients of the second drug (DIN2 side). \\[5pt]
+$
+\var{PairIng2}(\var{DIN1}, \var{DIN2}, \var{ingredient}) :=\\[5pt]
+\Pi_{\var{DIN1}, \var{DIN2}, \var{ingredient}}
+\sigma_{\substack{\var{AllNamedPairs}.\var{DIN2} = I2.\var{DIN}}}
+\big(\var{AllNamedPairs} \times \rho_{I2}(\var{Ing})\big)
+\\[10pt]
+$
+-- Ingredients of drug1 that are missing from drug2 (for the same pair). \\[5pt]
+$
+\var{Missing12}(\var{DIN1}, \var{DIN2}, \var{ingredient}) :=\\[5pt]
+\var{PairIng1}
+-
+\Pi_{\var{DIN1}, \var{DIN2}, \var{ingredient}}
+\sigma_{\substack{
+\var{PairIng1}.\var{DIN1} = \var{PairIng2}.\var{DIN1} \\
+\wedge \\
+\var{PairIng1}.\var{DIN2} = \var{PairIng2}.\var{DIN2} \\
+\wedge \\
+\var{PairIng1}.\var{ingredient} = \var{PairIng2}.\var{ingredient}
+}}
+(\var{PairIng1} \times \var{PairIng2})
+\\[10pt]
+$
+-- Ingredients of drug2 that are missing from drug1 (for the same pair). \\[5pt]
+$
+\var{Missing21}(\var{DIN1}, \var{DIN2}, \var{ingredient}) :=\\[5pt]
+\var{PairIng2}
+-
+\Pi_{\var{DIN1}, \var{DIN2}, \var{ingredient}}
+\sigma_{\substack{
+\var{PairIng1}.\var{DIN1} = \var{PairIng2}.\var{DIN1} \\
+\wedge \\
+\var{PairIng1}.\var{DIN2} = \var{PairIng2}.\var{DIN2} \\
+\wedge \\
+\var{PairIng1}.\var{ingredient} = \var{PairIng2}.\var{ingredient}
+}}
+(\var{PairIng1} \times \var{PairIng2})
+\\[10pt]
+$
+-- Pairs of drugs that do NOT have identical ingredient sets. \\[5pt]
+$
+\var{NonMatching}(\var{DIN1}, \var{DIN2}) :=\\[5pt]
+\Pi_{\var{DIN1}, \var{DIN2}}(\var{Missing12})
+\cup
+\Pi_{\var{DIN1}, \var{DIN2}}(\var{Missing21})
+\\[10pt]
+$
+-- Pairs of drugs that DO have identical ingredient sets. \\[5pt]
+$
+\var{MatchingDIN}(\var{DIN1}, \var{DIN2}) :=\\[5pt]
+\Pi_{\var{DIN1}, \var{DIN2}}(\var{AllNamedPairs})
+-
+\var{NonMatching}
+\\[10pt]
+$
+-- Final Answer: keep only those named pairs whose DINs are in MatchingDIN. \\[5pt]
+$
+\var{Answer}(\var{DIN1}, \var{Name1}, \var{DIN2}, \var{Name2}) :=\\[5pt]
+\Pi_{\var{DIN1}, \var{Name1}, \var{DIN2}, \var{Name2}}
+\sigma_{\substack{
+\var{AllNamedPairs}.\var{DIN1} = \var{MatchingDIN}.\var{DIN1} \\
+\wedge \\
+\var{AllNamedPairs}.\var{DIN2} = \var{MatchingDIN}.\var{DIN2}
+}}
+(\var{AllNamedPairs} \times \var{MatchingDIN})
+$
+}
+
+
+\item   % ----------
+{Patients at risk}
+
+{~}\\
+{\large
+-- Active ingredients in each drug (both brand-name and generic). \\[5pt]
+$
+\var{DrugIngredients}(\var{DIN}, \var{ingredient}) := \\[5pt]
+\hspace*{1cm}
+\Pi_{\var{DIN}, \var{ingredient}}
+\var{Contains} \\[5pt]
+\hspace*{1cm}
+\cup \\[5pt]
+\hspace*{1cm}
+\Pi_{G.\var{DIN}, C.\var{ingredient}}
+\big( \rho_{G}(\var{Generic}) \bowtie_{G.\var{brand} = C.\var{DIN}} \rho_{C}(\var{Contains}) \big) \\[10pt]
+$
+-- Pairs of drugs that interact (at least one ingredient interacts). \\[5pt]
+$
+\var{InteractingDrugs}(\var{DIN1}, \var{DIN2}) := \\[5pt]
+\hspace*{1cm}
+\Pi_{D1.\var{DIN}, D2.\var{DIN}}
+\sigma_{\substack{D1.\var{DIN} \neq D2.\var{DIN} \\ \wedge \\ D1.\var{ingredient} = I.\var{ingredient1} \\ \wedge \\ D2.\var{ingredient} = I.\var{ingredient2}}}
+\big( \rho_{D1}(\var{DrugIngredients}) \\[5pt]
+\hspace*{1cm}
+\times \rho_{D2}(\var{DrugIngredients})
+\times \rho_{I}(\var{Interaction}) \big) \\[10pt]
+$
+-- Prescriptions with same patient, doctor, and date but different drugs. \\[5pt]
+$
+\var{SameDayPairs}(\var{doctor}, \var{date}, \var{drug1}, \var{drug2}) := \\[5pt]
+\hspace*{1cm}
+\Pi_{P1.\var{doctor}, P1.\var{date}, P1.\var{drug}, P2.\var{drug}}
+\sigma_{\substack{P1.\var{patient} = P2.\var{patient} \\ \wedge \\ P1.\var{doctor} = P2.\var{doctor} \\ \wedge \\ P1.\var{date} = P2.\var{date} \\ \wedge \\ P1.\var{drug} \neq P2.\var{drug}}}
+\big( \rho_{P1}(\var{Prescription})
+\times \rho_{P2}(\var{Prescription}) \big) \\[10pt]
+$
+-- Doctors who prescribed interacting drugs on the same day. \\[5pt]
+$
+\var{Answer}(\var{doctor}, \var{date}) :=
+\Pi_{\var{doctor}, \var{date}}
+\sigma_{\substack{\var{drug1} = \var{DIN1} \\ \wedge \\ \var{drug2} = \var{DIN2}}}
+\big( \var{SameDayPairs} \times \var{InteractingDrugs} \big)
+$
+}
+
+\item   % ----------
+{Many generics} 
+
+-- cannot be expressed
+
+\item   % ----------
+{Lots of competition}
+
+{~}\\
+{\large
+-- Manufacturers that make at least one brand-name drug. \\[5pt]
+$
+\var{BrandManufacturers}(\var{manufacturer}) := 
+\Pi_{\var{manufacturer}}
+\var{Product} \\[10pt]
+$
+-- All (manufacturer, brand DIN) pairs for brands made by that manufacturer. \\[5pt]
+$
+\var{ManufacturerBrands}(\var{manufacturer}, \var{brand}) := 
+\Pi_{\var{manufacturer}, \var{DIN}}
+\var{Product} \\[10pt]
+$
+-- (manufacturer, brand DIN) where manufacturer makes a generic of that brand. \\[5pt]
+$
+\var{HasSelfGeneric}(\var{manufacturer}, \var{brand}) := \\[5pt]
+\hspace*{1cm}
+\Pi_{P.\var{manufacturer}, G.\var{brand}}
+\sigma_{P.\var{manufacturer} = G.\var{manufacturer}}
+\big( \rho_{P}(\var{Product}) \bowtie_{P.\var{DIN} = G.\var{brand}} \\[5pt]
+\hspace*{1cm}
+\rho_{G}(\var{Generic}) \big) \\[10pt]
+$
+-- (manufacturer, brand DIN) where manufacturer does NOT make a generic. \\[5pt]
+$
+\var{MissingSelfGeneric}(\var{manufacturer}, \var{brand}) := \\[5pt]
+\hspace*{1cm}
+\rho_{\var{manufacturer}, \var{brand}}(\var{ManufacturerBrands}) - \var{HasSelfGeneric} \\[10pt]
+$
+-- Manufacturers that fail condition 2 (at least one brand lacks self-generic). \\[5pt]
+$
+\var{FailCondition2}(\var{manufacturer}) := 
+\Pi_{\var{manufacturer}}
+\var{MissingSelfGeneric} \\[10pt]
+$
+-- Brand-name drugs that have a generic from another company. \\[5pt]
+$
+\var{HasOtherGeneric}(\var{brand}) := \\[5pt]
+\hspace*{1cm}
+\Pi_{G.\var{brand}}
+\sigma_{P.\var{manufacturer} \neq G.\var{manufacturer}}
+\big( \rho_{P}(\var{Product}) \bowtie_{P.\var{DIN} = G.\var{brand}}
+\rho_{G}(\var{Generic}) \big) \\[10pt]
+$
+-- (manufacturer, brand DIN) pairs where brand has an outside generic. \\[5pt]
+$
+\var{BrandWithOther}(\var{manufacturer}, \var{brand}) := \\[5pt]
+\hspace*{1cm}
+\Pi_{\var{manufacturer}, \var{brand}}
+\big( \rho_{\var{manufacturer}, \var{brand}}(\var{ManufacturerBrands}) \\[5pt]
+\hspace*{1cm}
+\bowtie_{\var{brand} = \var{brand}} \var{HasOtherGeneric} \big) \\[10pt]
+$
+-- (manufacturer, brand DIN) where brand lacks an outside generic. \\[5pt]
+$
+\var{MissingOtherGeneric}(\var{manufacturer}, \var{brand}) := \rho_{\var{manufacturer}, \var{brand}}(\var{ManufacturerBrands}) \\[5pt]
+\hspace*{1cm}
+- \var{BrandWithOther} \\[10pt]
+$
+-- Manufacturers that fail condition 3 (at least one brand lacks outside generic). \\[5pt]
+$
+\var{FailCondition3}(\var{manufacturer}) := 
+\Pi_{\var{manufacturer}}
+\var{MissingOtherGeneric} \\[10pt]
+$
+-- Manufacturers meeting all three conditions. \\[5pt]
+$
+\var{Answer}(\var{manufacturer}) := \var{BrandManufacturers} - \var{FailCondition2} - \var{FailCondition3}
+$
+}
+
+\end{enumerate}
+
+
+
+%----------------------------------------------------------------------------------------------------------------------
+\section*{Part 2: Additional Integrity Constraints}
+
+\begin{enumerate}
+
+\item   % ----------
+{Symmetry}
+{~}\\[10pt]
+{\large
+-- Interaction pairs with ingredients swapped. \\[5pt]
+$
+\var{Swapped}(\var{ingredient1}, \var{ingredient2}) :=
+\Pi_{\var{ingredient2}, \var{ingredient1}}
+(\var{Interaction})
+\\[10pt]
+$
+-- Enforce symmetry: every interaction must appear in both directions. \\[5pt]
+$
+\var{Answer} :=
+\var{Interaction}
+-
+\var{Swapped}
+=
+\emptyset
+$
+}
+
+\item   % ----------
+{Don't surpass those with seniority}
+
+-- cannot be expressed
+\item   % ----------
+{Brand-name first}
+
+{~}\\
+{\large
+-- All prescriptions for generic drugs combined with their brand-name equivalents. \\[5pt]
+$
+\var{GenericMatchedBrand}(\var{RxID}, \var{date}, \var{patient}, \var{drug}, \var{doctor}, \var{dosage}, \var{note},
+\var{DIN}, \var{brand}, \var{name},\\[5pt]\hspace*{1cm} \var{manufacturer}) :=
+\sigma_{\var{Prescription}.\var{drug} = \var{Generic}.\var{DIN}}
+(\var{Prescription} \times \var{Generic})
+\\[10pt]
+$
+-- Generic prescriptions for which the same doctor prescribed the brand equivalent earlier. \\[5pt]
+$
+\var{ValidGenericPrescription}(\var{RxID}, \var{date}, \var{patient}, \var{drug}, \var{doctor}, \var{dosage}, \var{note}) :=\\[5pt]
+\hspace*{1cm}
+\Pi_{\substack{
+\var{GMB}.\var{RxID} \\
+\var{GMB}.\var{date} \\
+\var{GMB}.\var{patient} \\
+\var{GMB}.\var{drug} \\
+\var{GMB}.\var{doctor} \\
+\var{GMB}.\var{dosage} \\
+\var{GMB}.\var{note}
+}}
+\sigma_{\substack{
+\var{GMB}.\var{brand} = P.\var{drug} \\
+\wedge \\
+\var{GMB}.\var{date} > P.\var{date} \\
+\wedge \\
+\var{GMB}.\var{doctor} = P.\var{doctor}
+}}
+\big(
+\rho_{GMB}(\var{GenericMatchedBrand})
+\times
+\rho_{P}(\var{Prescription})
+\big)
+\\[10pt]
+$
+-- All generic prescriptions projected to the same schema. \\[5pt]
+$
+\var{AllGenericCore}(\var{RxID}, \var{date}, \var{patient}, \var{drug}, \var{doctor}, \var{dosage}, \var{note}) :=\\[5pt]\hspace*{1cm}
+\Pi_{\var{RxID}, \var{date}, \var{patient}, \var{drug}, \var{doctor}, \var{dosage}, \var{note}}
+(\var{GenericMatchedBrand})
+\\[10pt]
+$
+-- Integrity constraint: every generic prescription must be valid. \\[5pt]
+$
+\var{Answer} :=
+\var{AllGenericCore}
+-
+\var{ValidGenericPrescription}
+=
+\emptyset
+$
+}
+
+\end{enumerate}
+\end{document}
+
+
+
